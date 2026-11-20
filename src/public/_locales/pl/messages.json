@@ -1,6 +1,6 @@
 {
   "appName": {
-    "message": "Zabbix Vue",
+    "message": "Zabbix Vue OIDC",
     "description": "Monitoruje problemy Zabbixa z poziomy przegladarki internetowej"
   },
   "appDescription": {

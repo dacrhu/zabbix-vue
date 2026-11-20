@@ -1,7 +1,7 @@
 "use strict";
 
 import { browser } from './lib/browser-shim.js'; // Chrome: aliases globalThis.chrome (no-op in Firefox)
-import { Zabbix } from './lib/zabbix-promise.js';
+import { Zabbix, OidcSessionError } from './lib/zabbix-promise.js';
 import { encryptSettingKeys, decryptSettings } from './lib/crypto.js'
 
 const icon = (name) => `images/${name}.png`
@@ -369,7 +369,70 @@ async function filterSuppressedTriggers(zabbix, triggers) {
   return triggers.filter(t => !suppressedIds.has(t.triggerid));
 }
 
-async function getServerTriggers(serverConfig) {
+const OIDC_RENEW_MIN_GAP_MS = 5 * 60 * 1000; // don't hammer the IdP / user
+const OIDC_RENEW_SILENT_WAIT_MS = 20 * 1000; // wait for an automatic round trip
+const oidcLastRenew = new Map(); // server origin -> timestamp of last attempt
+
+async function renewOidcSession(serverUrl) {
+  /*
+   * Renew an expired OpenID Connect proxy session. The proxy session lives in
+   * browser cookies, so open the Zabbix URL in a background tab and let the
+   * proxy / identity provider redo the redirect dance. If the IdP still has
+   * its own session this completes without interaction and the tab is closed.
+   * If it needs a login, the tab is brought to the front for the user and
+   * left open. Returns true when the tab landed back on the Zabbix origin.
+   */
+  let origin;
+  try {
+    origin = new URL(serverUrl).origin;
+  } catch (_) { // eslint-disable-line no-unused-vars
+    return false;
+  }
+  const now = Date.now();
+  if (now - (oidcLastRenew.get(origin) || 0) < OIDC_RENEW_MIN_GAP_MS) {
+    return false;
+  }
+  oidcLastRenew.set(origin, now);
+
+  const tab = await browser.tabs.create({ url: serverUrl, active: false });
+  const landed = await new Promise((resolve) => {
+    let finished = false;
+    const finish = (value) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      browser.tabs.onUpdated.removeListener(onUpdated);
+      browser.tabs.onRemoved.removeListener(onRemoved);
+      resolve(value);
+    };
+    const onUpdated = (tabId, changeInfo, updatedTab) => {
+      // Tab URLs are only visible for hosts we have permission for, i.e. the
+      // Zabbix origin — the IdP hops report no url.
+      if (tabId === tab.id && changeInfo.status === "complete" &&
+          updatedTab.url && updatedTab.url.startsWith(origin)) {
+        finish(true);
+      }
+    };
+    const onRemoved = (tabId) => { if (tabId === tab.id) finish(false); };
+    const timer = setTimeout(() => finish(false), OIDC_RENEW_SILENT_WAIT_MS);
+    browser.tabs.onUpdated.addListener(onUpdated);
+    browser.tabs.onRemoved.addListener(onRemoved);
+  });
+
+  try {
+    if (landed) {
+      await browser.tabs.remove(tab.id);
+    } else {
+      // Interactive login needed — show the tab to the user
+      await browser.tabs.update(tab.id, { active: true });
+    }
+  } catch (_) { // eslint-disable-line no-unused-vars
+    // Tab was closed by the user in the meantime
+  }
+  return landed;
+}
+
+async function getServerTriggers(serverConfig, allowOidcRenew = true) {
   /*
    * Return data from zabbix trigger.get call to a specific server
    *
@@ -378,7 +441,7 @@ async function getServerTriggers(serverConfig) {
    */
   await clearPopupTableError();
 
-  const { url, user, pass, apiToken, authType, version, showSuppressed } = serverConfig;
+  const { url, user, pass, apiToken, authType, version, showSuppressed, oidcProxy } = serverConfig;
   const requestObject = buildTriggerRequest(serverConfig);
 
   // Guest auth logs in as the "guest" user with an empty password —
@@ -390,7 +453,8 @@ async function getServerTriggers(serverConfig) {
     isGuest ? "" : pass,
     isGuest ? "" : apiToken,
     version,
-    makeVersionPersister(url)
+    makeVersionPersister(url),
+    { oidc: Boolean(oidcProxy) }
   );
 
   let triggerResults = {};
@@ -425,6 +489,13 @@ async function getServerTriggers(serverConfig) {
       };
     }
   } catch (err) {
+    if (oidcProxy && allowOidcRenew && err instanceof OidcSessionError) {
+      // Proxy session expired: renew it through the browser and retry once
+      log("OIDC session expired for " + url + " — renewing");
+      if (await renewOidcSession(url)) {
+        return getServerTriggers(serverConfig, false);
+      }
+    }
     let errorMessage = "Error communicating with: " + url.toString();
     console.error(errorMessage, err);
     log(err.message);
@@ -497,6 +568,7 @@ async function getAllTriggers() {
         maintenance: serverSettings.maintenance,
         minSeverity: serverSettings.minSeverity,
         showSuppressed: serverSettings.showSuppressed,
+        oidcProxy: serverSettings.oidcProxy === true,
       };
 
       newTriggerData = await getServerTriggers(serverConfig);
@@ -843,6 +915,7 @@ export {
   getSuppressedTriggerIds,
   filterSuppressedTriggers,
   getServerTriggers,
+  renewOidcSession,
   getAllTriggers,
   sendNotify,
   playSounds,

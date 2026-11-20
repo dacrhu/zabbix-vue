@@ -29,6 +29,7 @@
     "offscreen"
   ],
   "host_permissions": [],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
   "content_security_policy": {
       "extension_pages": "script-src 'self'; object-src 'self'"
   },
@@ -39,7 +40,7 @@
   ],
   "{{firefox}}.browser_specific_settings": {
     "gecko": {
-      "id": "{493da8e7-8299-4edd-9895-99452a03de66}",
+      "id": "{7d1b4c52-3f0a-4e6b-9a2e-5c8f1d0e9b37}",
       "data_collection_permissions": {
         "required": ["authenticationInfo"]
       }

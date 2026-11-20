@@ -8,6 +8,18 @@
  * capability stops working — no version-string parsing for behavior
  * decisions. The version string is informational only.
  */
+/**
+ * Thrown when a server behind an OpenID Connect proxy no longer accepts the
+ * browser's proxy session (redirect to the identity provider, 401/403, or an
+ * HTML login page instead of JSON-RPC).
+ */
+export class OidcSessionError extends Error {
+  constructor(message) {
+    super(message || "OIDC proxy session expired");
+    this.name = "OidcSessionError";
+  }
+}
+
 export class Zabbix {
   /**
    * Create Zabbix API client.
@@ -18,8 +30,12 @@ export class Zabbix {
    * @param {string} version - server version e.g. "7.0.19" (informational only)
    * @param {function} onVersionChange - called with the detected version
    *   when the client detects the server version changed
+   * @param {object} options - { oidc: true } when Zabbix sits behind an
+   *   OpenID Connect proxy: requests then carry the browser's proxy session
+   *   cookies and an expired session raises OidcSessionError
    */
-  constructor(url, user, password, apiToken, version, onVersionChange) {
+  constructor(url, user, password, apiToken, version, onVersionChange, options = {}) {
+    this.oidc = Boolean(options && options.oidc);
     this.url = url;
     this.user = user;
     this.password = password;
@@ -223,22 +239,50 @@ export class Zabbix {
     }
     myHeaders.append("Content-Type", "application/json-rpc");
 
+    let response;
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000);
-      const response = await fetch(url, {
-        method: "POST",
-        body: data,
-        headers: myHeaders,
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-      if (!response.ok) {
-        throw new Error(`Response status: ${response.status}`);
+      try {
+        const init = {
+          method: "POST",
+          body: data,
+          headers: myHeaders,
+          signal: controller.signal,
+        };
+        if (this.oidc) {
+          // Send the proxy session cookie; never follow the redirect to the
+          // identity provider (cross-origin, would fail on CORS anyway).
+          init.credentials = "include";
+          init.redirect = "manual";
+        }
+        response = await fetch(url, init);
+      } finally {
+        clearTimeout(timeout);
       }
+    } catch (e) {
+      throw new Error(`Failed to communicate with server (${e && e.name}: ${e && e.message})`);
+    }
+
+    if (this.oidc) {
+      const contentType = (response.headers && response.headers.get("Content-Type")) || "";
+      if (
+        response.type === "opaqueredirect" ||
+        (response.status >= 300 && response.status < 400) ||
+        response.status === 401 ||
+        response.status === 403 ||
+        (response.ok && contentType.toLowerCase().includes("text/html"))
+      ) {
+        throw new OidcSessionError();
+      }
+    }
+    if (!response.ok) {
+      throw new Error(`Failed to communicate with server (HTTP ${response.status})`);
+    }
+    try {
       return await response.json();
     } catch {
-      throw new Error("Failed to communicate with server");
+      throw new Error("Failed to communicate with server (response is not valid JSON)");
     }
   }
 

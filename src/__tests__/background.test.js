@@ -80,6 +80,7 @@ vi.mock('../lib/crypto.js', () => ({
 // Mock Zabbix class — reference hoisted MockZabbix constructor
 vi.mock('../lib/zabbix-promise.js', () => ({
   Zabbix: MockZabbix,
+  OidcSessionError: class OidcSessionError extends Error {},
 }));
 
 // ── Now import the module under test ────────────────────────────────────────
@@ -757,7 +758,8 @@ describe('background.js', () => {
         '',
         '',
         '7.0.0',
-        expect.any(Function)
+        expect.any(Function),
+        { oidc: false }
       );
     });
 
@@ -772,7 +774,8 @@ describe('background.js', () => {
         'pass',
         '',
         '7.0.0',
-        expect.any(Function)
+        expect.any(Function),
+        { oidc: false }
       );
     });
 
@@ -848,7 +851,8 @@ describe('background.js', () => {
         'pass1',
         'api-token-1',
         '6.4.0',
-        expect.any(Function)
+        expect.any(Function),
+        { oidc: false }
       );
     });
 
