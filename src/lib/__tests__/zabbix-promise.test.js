@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Zabbix } from '../zabbix-promise.js';
+import { Zabbix, OidcSessionError } from '../zabbix-promise.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -584,5 +584,42 @@ describe('Zabbix class', () => {
       // Only 1 fetch call — the trigger.get; login and logout were no-ops
       expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('OIDC proxy mode', () => {
+  const mk = (opts) => new Zabbix('https://z.example/api_jsonrpc.php', 'u', 'p', '', '7.0.0', undefined, opts);
+
+  it('sends cookies and does not follow redirects when oidc is on', async () => {
+    const fetchSpy = mockFetch([jsonRpcOk('7.0.0')]);
+    vi.stubGlobal('fetch', fetchSpy);
+    await mk({ oidc: true }).call('apiinfo.version', []);
+    const init = fetchSpy.mock.calls[0][1];
+    expect(init.credentials).toBe('include');
+    expect(init.redirect).toBe('manual');
+  });
+
+  it('leaves fetch options alone when oidc is off', async () => {
+    const fetchSpy = mockFetch([jsonRpcOk('7.0.0')]);
+    vi.stubGlobal('fetch', fetchSpy);
+    await mk().call('apiinfo.version', []);
+    const init = fetchSpy.mock.calls[0][1];
+    expect(init.credentials).toBeUndefined();
+    expect(init.redirect).toBeUndefined();
+  });
+
+  it.each([
+    ['opaque redirect', { type: 'opaqueredirect', status: 0, ok: false }],
+    ['401', { status: 401, ok: false }],
+    ['403', { status: 403, ok: false }],
+    ['html login page', { status: 200, ok: true, headers: new Headers({ 'Content-Type': 'text/html' }) }],
+  ])('raises OidcSessionError on %s', async (_name, resp) => {
+    vi.stubGlobal('fetch', vi.fn(async () => resp));
+    await expect(mk({ oidc: true }).call('trigger.get', {})).rejects.toBeInstanceOf(OidcSessionError);
+  });
+
+  it('does not raise OidcSessionError for 401 when oidc is off', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ status: 401, ok: false })));
+    await expect(mk().call('trigger.get', {})).rejects.toThrow('Failed to communicate with server');
   });
 });

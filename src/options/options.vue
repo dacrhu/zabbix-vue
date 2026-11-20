@@ -94,6 +94,13 @@
               </div>
 
               <v-checkbox
+                v-model="server.oidcProxy"
+                class="mb-0 pa-0"
+                :label="$i18n('oidcProxy')"
+                :hint="$i18n('oidcProxyHint')"
+                persistent-hint
+              />
+              <v-checkbox
                 v-model="server.hide"
                 class="mb-0 pa-0"
                 :label="$i18n('hideEvents')"
@@ -235,6 +242,7 @@ const defaultServer = {
   alias: "New Server",
   url: "",
   authType: "password",
+  oidcProxy: false,
   user: "",
   pass: "",
   apiToken: "",
@@ -345,7 +353,9 @@ function serverAPI(val, index) {
     }
 
     // validate zabbix connection with query zabbix api version and save in storage
-    const zabbix = new Zabbix(val + "/api_jsonrpc.php", null, null);
+    const zabbix = new Zabbix(val + "/api_jsonrpc.php", null, null, undefined, undefined, undefined, {
+      oidc: zabbixs.value.servers[index].oidcProxy,
+    });
     zabbix
       .call("apiinfo.version", {})
       .then((value) => {
@@ -516,7 +526,9 @@ function refreshGroups(server, user, pass, apiToken, version, index) {
     user,
     pass,
     apiToken,
-    version
+    version,
+    undefined,
+    { oidc: zabbixs.value["servers"][index].oidcProxy }
   );
   zabbix
     .login()

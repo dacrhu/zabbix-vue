@@ -1,6 +1,6 @@
 {
   "appName": {
-    "message": "Zabbix Vue",
+    "message": "Zabbix Vue OIDC",
     "description": "Extension name"
   },
   "notClassified": {
@@ -82,5 +82,13 @@
   "filter": {
     "message": "Szűrő",
     "description": "Popup label"
+  },
+  "oidcProxy": {
+    "message": "A szerver OpenID Connect proxy mögött van",
+    "description": "Options screen OIDC proxy checkbox"
+  },
+  "oidcProxyHint": {
+    "message": "A böngésző proxy-bejelentkezését használja, és lejáratkor automatikusan megújítja. Egyszer jelentkezz be a proxyba ebben a böngészőben.",
+    "description": "Options screen OIDC proxy hint"
   }
 }

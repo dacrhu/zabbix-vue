@@ -1,6 +1,6 @@
 {
   "appName": {
-    "message": "Zabbix Vue",
+    "message": "Zabbix Vue OIDC",
     "description": "Extension name"
   },
   "appDescription": {
@@ -246,5 +246,13 @@
   "error": {
     "message": "Plugin Error",
     "description": "Popup error"
+  },
+  "oidcProxy": {
+    "message": "Server is behind an OpenID Connect proxy",
+    "description": "Options screen OIDC proxy checkbox"
+  },
+  "oidcProxyHint": {
+    "message": "Uses your browser's proxy login session and renews it automatically when it expires. Sign in to the proxy once in this browser.",
+    "description": "Options screen OIDC proxy hint"
   }
 }

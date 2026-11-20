@@ -28,6 +28,8 @@ Options screen displays many settings including the ability to only show problem
 <img width="393" alt="options hostgroup" src="https://user-images.githubusercontent.com/1360357/37271231-e011c646-25c9-11e8-9436-9b728afe3438.png">
 
 
+OpenID Connect proxy support: tick "Server is behind an OpenID Connect proxy" for a server (e.g. behind oauth2-proxy or mod_auth_openidc). The extension then uses the browser's proxy login cookies on every poll (which also keeps sliding proxy sessions alive). When the session expires, it reopens the Zabbix URL in a background tab to renew it automatically; if the identity provider needs an interactive login, that tab is brought to the front. Sign in to the proxy once in the same browser first.
+
 ## Build
 
 ```bash
