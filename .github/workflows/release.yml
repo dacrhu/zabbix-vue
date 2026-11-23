@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [chrome, firefox]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Build (${{ matrix.target }})
+        run: npm run build
+        env:
+          TARGET: ${{ matrix.target }}
+
+      - name: Zip build
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          cd dist && zip -r "../zabbix-vue-${VERSION}-${{ matrix.target }}.zip" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zabbix-vue-${{ matrix.target }}
+          path: zabbix-vue-*.zip
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: zabbix-vue-*.zip
