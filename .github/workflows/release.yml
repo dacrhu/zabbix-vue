@@ -20,8 +20,8 @@ jobs:
         with:
           node-version: 22
 
-      # a package-lock.json a .gitignore-ban van, ezért npm install
-      - run: npm install
+      # nincs lock fájl (.gitignore), és a peer dependency-k nélküle npm hibát okoznak (edgesOut)
+      - run: npm install --legacy-peer-deps
 
       - run: npm test
 
