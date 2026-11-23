@@ -1,8 +1,7 @@
 name: Release
 
 on:
-  release:
-    types: [published]
+  push:
   workflow_dispatch:
 
 permissions:
@@ -20,9 +19,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
-      - run: npm ci
+      # a package-lock.json a .gitignore-ban van, ezért npm install
+      - run: npm install
 
       - run: npm test
 
@@ -42,7 +41,7 @@ jobs:
           path: zabbix-vue-*.zip
 
       - name: Attach to release
-        if: github.event_name == 'release'
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: zabbix-vue-*.zip
